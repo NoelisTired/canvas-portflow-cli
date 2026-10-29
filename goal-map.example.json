@@ -1,0 +1,13 @@
+{
+  "_comment": "Maps evidence folder names (under the source dir) to Portflow goal nicknames or names. Copy to goal-map.json and adjust. Folders not listed here are reported and skipped unless --loose matches a goal by name. Nicknames (LO1..) are matched case-insensitively against the goal's nickname; otherwise the value is matched against the goal name.",
+  "collection": "Roosterke.nl",
+  "folders": {
+    "Full-stack Application": "LO1",
+    "Agile Development": "LO2",
+    "Professional Standard": "Professional Standard",
+    "Personal Leadership": "Personal Leadership",
+    "Software Quality Assurance": "Software Quality Assurance",
+    "Software Development Process Automation": "Software Development Process Automation"
+  },
+  "skip_folders": ["diagrammen", "Bewijsstukken", "Workshops"]
+}

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" font-family="'SF Mono','JetBrains Mono','Fira Code',ui-monospace,Menlo,monospace">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b2e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4f9bff"/>
+      <stop offset="0.55" stop-color="#7c6bff"/>
+      <stop offset="1" stop-color="#21d4a3"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="420" fill="url(#bg)"/>
+
+  <!-- subtle grid -->
+  <g stroke="#ffffff" stroke-opacity="0.035" stroke-width="1">
+    <path d="M0 105 H1280 M0 210 H1280 M0 315 H1280"/>
+    <path d="M160 0 V420 M320 0 V420 M480 0 V420 M640 0 V420 M800 0 V420 M960 0 V420 M1120 0 V420"/>
+  </g>
+
+  <!-- terminal window card -->
+  <g transform="translate(96,82)">
+    <rect x="0" y="0" width="1088" height="256" rx="18" fill="#0b0f17" stroke="#2a3350" stroke-width="1.5"/>
+    <rect x="0" y="0" width="1088" height="44" rx="18" fill="#141a2b"/>
+    <rect x="0" y="22" width="1088" height="22" fill="#141a2b"/>
+    <circle cx="28" cy="22" r="7" fill="#ff5f56"/>
+    <circle cx="54" cy="22" r="7" fill="#ffbd2e"/>
+    <circle cx="80" cy="22" r="7" fill="#27c93f"/>
+    <text x="544" y="27" fill="#5b667f" font-size="15" text-anchor="middle">canvas.py: portflow sync</text>
+
+    <text x="40" y="92" font-size="19" fill="#21d4a3">$ <tspan fill="#c9d4ee">canvas --project Roosterke-Documentatie</tspan></text>
+    <text x="40" y="124" font-size="19" fill="#5b667f">· project 'Roosterke-Documentatie' -&gt; collection 'Roosterke.nl'</text>
+    <text x="40" y="156" font-size="19" fill="#c9d4ee">＋ ADD <tspan fill="#5b667f">De AI-assistent.pdf</tspan></text>
+    <text x="40" y="188" font-size="19" fill="#c9d4ee">↻ VERSION <tspan fill="#5b667f">AVG en privacy.pdf</tspan></text>
+    <text x="40" y="220" font-size="19" fill="#c9d4ee">· SKIP <tspan fill="#5b667f">37 bestanden, up to date</tspan> <tspan fill="#21d4a3">✓</tspan></text>
+  </g>
+
+  <!-- title -->
+  <text x="640" y="392" text-anchor="middle" font-size="40" font-weight="700" fill="url(#accent)" filter="url(#glow)" letter-spacing="1">FontysCanvasCLI</text>
+</svg>

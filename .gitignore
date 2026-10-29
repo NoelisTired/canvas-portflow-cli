@@ -1,0 +1,9 @@
+.venv/
+goal-map.json
+__pycache__/
+*.pyc
+.pw-profile/
+.canvas-manifest.json
+intro.html
+secrets.json
+*.env
