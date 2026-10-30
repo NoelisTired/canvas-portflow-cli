@@ -35,6 +35,9 @@ DEFAULTS = {
         "?launch_type=global_navigation&toolId=portfolio-23360"
     ),
     "ntfy_topic": "",  # empty = ntfy disabled unless the user sets one
+    # Where the user's portfolio documents live (set by the --init wizard). Used
+    # as the default --project; empty means "use the current directory".
+    "project_dir": "",
     # FeedPulse (optional, per-course external tool).
     "feedpulse_host": "fhict.feedpulse.com",
     "feedpulse_course": "",

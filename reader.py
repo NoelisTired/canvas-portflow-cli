@@ -2,7 +2,7 @@
 """canvas reader - view or update a collection's reader (intro) text.
 
 The "reader" is the HTML description shown at the top of a Portflow collection
-(e.g. the Roosterke intro). Updating it REPLACES the whole field, so this is a
+(e.g. a portfolio intro). Updating it REPLACES the whole field, so this is a
 confirmed step: default shows the current reader, --set writes a new one.
 
 Source of the new text (pick one), all treated as the full reader body:
@@ -25,7 +25,7 @@ Usage:
   python reader.py --project <dir>                      # show current reader
   python reader.py --project <dir> --mentionable        # list @-referable names
   python reader.py --project <dir> --set --from intro.md
-  python reader.py --collection "Roosterke.nl" --set --html "<p>@[X.pdf] ...</p>"
+  python reader.py --collection "<naam>" --set --html "<p>@[X.pdf] ...</p>"
 """
 
 from __future__ import annotations

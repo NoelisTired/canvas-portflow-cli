@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""canvas - place Roosterke evidence into the Portflow portfolio.
+"""canvas - sync a folder of documents into a Portflow portfolio.
 
 Flow:
-  1. Log into Canvas via Fontys ADFS (vendored from fontys-canvas-bypass).
+  1. Log into Canvas (Fontys ADFS by default, configurable).
   2. LTI 1.3 launch into Portflow -> cookie session + CSRF.
   3. Read portfolio structure + existing evidence.
   4. Plan per source folder (folder name -> goal): for each file decide
@@ -131,12 +131,91 @@ def login() -> None:
     """
     os.environ["CANVAS_HEADFUL"] = "1"
     user, pw = load_credentials()  # may be (None, None); that is fine
-    eprint("· opening a browser window for you to log in…")
+    eprint("· een browservenster wordt geopend zodat je kunt inloggen…")
     s, launch = launch_with_playwright(PORTFLOW_LAUNCH_URL, user, pw)
     pf = PortflowClient(s)
     me = pf.current_user()
     eprint(f"✓ Ingelogd als {me.get('name')}. De sessie is bewaard; volgende keren "
            "gaat het vanzelf (headless).")
+
+
+def init_wizard() -> None:
+    """Interactive onboarding: ask the essentials and write canvas.config.json.
+
+    Walks a first-time user through the few things the tool needs: where their
+    portfolio documents live, their Canvas URL and the Portflow launch URL, and
+    an optional ntfy topic. Writes a config file (no secrets) and offers to log
+    in. Nothing here stores a password.
+    """
+    from lib import config as cfg
+
+    def ask(prompt: str, default: str = "") -> str:
+        suffix = f" [{default}]" if default else ""
+        try:
+            val = input(f"{prompt}{suffix}: ").strip()
+        except EOFError:
+            val = ""
+        return val or default
+
+    print("\n=== canvas-portflow onboarding ===")
+    print("Ik stel een paar vragen en schrijf daarna een config-bestand. Er wordt "
+          "geen wachtwoord opgeslagen.\n")
+
+    # 1. Where the portfolio documents live.
+    print("Waar wil je je portfoliodocumenten op baseren?")
+    print("  (een map met per leeruitkomst een submap, en optioneel een reader.txt)")
+    project = ask("  Projectmap", str(Path.cwd()))
+    proj_path = Path(project).expanduser()
+    if not proj_path.is_dir():
+        print(f"  Let op: '{proj_path}' bestaat nog niet. Dat mag; maak hem later aan.")
+
+    # 2. Canvas + Portflow.
+    print("\nJe onderwijsinstelling (Instructure Canvas + Drieam Portflow):")
+    canvas_url = ask("  Canvas-URL", cfg.DEFAULTS["canvas_url"])
+    print("  De Portflow launch-URL vind je in Canvas: open het Portfolio-item in "
+          "de navigatie en kopieer de URL waarvandaan het opent.")
+    launch_url = ask("  Portflow launch-URL", cfg.DEFAULTS["portflow_launch_url"])
+    portflow_host = ask("  Portflow-host", cfg.DEFAULTS["portflow_host"])
+
+    # 3. Optional ntfy.
+    print("\nOptioneel: een ntfy.sh-topic voor een melding na het uploaden "
+          "(leeg laten = uit).")
+    ntfy = ask("  ntfy-topic", "")
+
+    config = {
+        "canvas_url": canvas_url,
+        "portflow_host": portflow_host,
+        "portflow_launch_url": launch_url,
+        "ntfy_topic": ntfy,
+        "project_dir": str(proj_path),
+    }
+
+    # Write to ./canvas.config.json by default (picked up automatically).
+    target = Path.cwd() / "canvas.config.json"
+    if target.exists():
+        if ask(f"\n{target.name} bestaat al. Overschrijven? (j/n)", "n").lower() \
+                not in ("j", "ja", "y", "yes"):
+            print("Afgebroken; bestaand config-bestand ongemoeid gelaten.")
+            return
+    target.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
+    print(f"\n✓ Config geschreven naar {target}")
+    print("  (je kunt dit bestand altijd met de hand aanpassen)")
+
+    # 4. Offer to log in now.
+    if ask("\nNu inloggen in Canvas? Je typt zelf je wachtwoord in het "
+           "browservenster. (j/n)", "j").lower() in ("j", "ja", "y", "yes"):
+        # Reload config so the just-written values take effect this run.
+        import importlib
+        importlib.reload(cfg)
+        globals()["PORTFLOW_LAUNCH_URL"] = cfg.PORTFLOW_LAUNCH_URL
+        try:
+            login()
+        except (PlaywrightLaunchError, ConfigError) as e:
+            eprint(f"✗ Inloggen mislukt: {e}")
+            eprint("  Je kunt het later opnieuw proberen met: python canvas.py --login")
+            return
+    print("\nKlaar. Probeer een proefrun (zonder te uploaden):")
+    print(f"  python canvas.py --project \"{proj_path}\"")
 
 
 # ---- goal mapping --------------------------------------------------------
@@ -182,7 +261,7 @@ def _tokens(name: str) -> set[str]:
 def detect_source(project: Path) -> Path:
     """Pick the evidence source dir for a project.
 
-    Prefers an `output/` subdir (the Roosterke convention); else the project
+    Prefers an `output/` subdir if present; else the project
     dir itself if it already contains goal-named subfolders.
     """
     out = project / "output"
@@ -204,8 +283,8 @@ def match_collection(cols: list[dict], project: Path, gmap: dict) -> tuple[dict,
         if col:
             return col, []
     # Name-match: a project and a collection match when they share a
-    # meaningful word token (e.g. "roosterke" in both "Roosterke-Documentatie"
-    # and "Roosterke.nl"), or when one normalised name contains the other.
+    # meaningful word token (e.g. a project name shared with a collection name),
+    # or when one normalised name contains the other.
     ptoks = _tokens(project.name)
     pkey = _norm(project.name)
     scored = []
@@ -456,11 +535,21 @@ def ntfy_summary(col: dict, uploaded: list[dict], topic: str = NTFY_TOPIC) -> No
 
 # ---- main ----------------------------------------------------------------
 
+def _default_project() -> Path:
+    """Default project dir: config `project_dir` if set, else the cwd."""
+    try:
+        from lib import config as _c
+        p = _c._FILE_CONFIG.get("project_dir", "")
+    except Exception:
+        p = ""
+    return Path(p).expanduser() if p else Path.cwd()
+
+
 def main():
     ap = argparse.ArgumentParser(description="Place project evidence into Portflow.")
-    ap.add_argument("--project", type=Path, default=Path.cwd(),
-                    help="Project dir (default: cwd). Source + collection are "
-                         "auto-detected from it.")
+    ap.add_argument("--project", type=Path, default=_default_project(),
+                    help="Project dir (default: config project_dir, else cwd). "
+                         "Source + collection are auto-detected from it.")
     ap.add_argument("--source", type=Path,
                     help="Override the evidence root (folders = goals).")
     ap.add_argument("--collection",
@@ -480,12 +569,23 @@ def main():
                          "already exists on Portflow, WITHOUT uploading. Use after a "
                          "hashing change or a lost/stale manifest so unchanged files "
                          "stop showing up as new versions.")
+    ap.add_argument("--init", action="store_true",
+                    help="Onboarding wizard: ask where your documents live and your "
+                         "school's URLs, write canvas.config.json, and offer to log in.")
     ap.add_argument("--login", action="store_true",
                     help="One-time interactive login: open a browser so you can "
                          "sign in yourself. No password is stored; the session is "
                          "remembered for later headless runs.")
     ap.add_argument("--json", action="store_true", help="Emit the plan as JSON.")
     args = ap.parse_args()
+
+    if args.init:
+        try:
+            init_wizard()
+        except KeyboardInterrupt:
+            eprint("\nAfgebroken.")
+            sys.exit(1)
+        return
 
     if args.login:
         try:

@@ -1,165 +1,190 @@
 <p align="center">
-  <img src="docs/banner.png" alt="FontysCanvasCLI" width="100%">
+  <img src="docs/banner.png" alt="Canvas Portfolio CLI" width="100%">
 </p>
 
-<h1 align="center">FontysCanvasCLI</h1>
+<h1 align="center">Canvas Portfolio CLI</h1>
 
 <p align="center">
-  Sync a folder of evidence into your Instructure Canvas / Drieam Portflow portfolio, idempotently, with clickable @references in the reader.
+  Zet een map met documenten netjes en herhaalbaar in je Portflow-portfolio, met klikbare @-verwijzingen in de leeswijzer.
 </p>
 
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="Playwright" src="https://img.shields.io/badge/login-Playwright-2ead33?logo=microsoft&logoColor=white">
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="Licentie" src="https://img.shields.io/badge/licentie-MIT-blue">
 </p>
 
 ---
 
-FontysCanvasCLI turns a folder of documents into portfolio evidence on
-Portflow (`portfolio.drieam.app`), reached through Instructure Canvas. It reads
-your existing portfolio and syncs a local folder into it: new files are added,
-changed files get a new version, unchanged files are left alone, so re-running
-is safe. It can also build the collection reader (the intro text) into a story
-that links to your documents, and request reviews or share the portfolio, which
-always ask first.
+Deze tool zet een lokale map met documenten om in portfolio-bewijs op Portflow
+(`portfolio.drieam.app`), bereikt via Instructure Canvas. Hij leest je bestaande
+portfolio en synchroniseert je map ernaartoe: nieuwe bestanden komen erbij,
+gewijzigde bestanden krijgen een nieuwe versie, en ongewijzigde bestanden blijven
+met rust. Opnieuw draaien is dus veilig. Daarnaast kan hij de leeswijzer van een
+verzameling opbouwen als een verhaal dat naar je documenten linkt, en reviews
+aanvragen of je portfolio delen (die vragen altijd eerst om bevestiging).
 
-Defaults target Fontys, but every school-specific setting is configurable, so it
-works for any Instructure Canvas + Drieam Portflow setup.
+De tool is niet aan één project gebonden: je wijst hem naar een willekeurige
+projectmap. De standaardinstellingen zijn op Fontys afgestemd, maar alles wat
+instellingsspecifiek is, is instelbaar, zodat het werkt voor elke Instructure
+Canvas plus Drieam Portflow.
 
-## No password required
+## Snel starten (onboarding)
 
-The recommended login stores no password anywhere. You sign in once yourself in
-a visible browser window (you type your own password, the tool never sees it),
-and the browser profile remembers the session for later headless runs:
-
-```bash
-python canvas.py --login
-```
-
-If you prefer fully headless runs on your own machine, you can optionally put
-credentials in a secrets file or env vars (see Credentials below). The tool only
-ever uses them to fill the login form; it never intercepts, captures, or writes
-a password, and never prints one.
-
-## How a project is laid out
-
-Point the tool at a project directory. Inside it:
-
-```
-my-portfolio/
-  reader.txt                     # the reader/intro, with @references (optional)
-  <Learning Outcome 1>/          # one folder per learning outcome
-    Some document.pdf
-    Another document.pdf
-  <Learning Outcome 2>/
-    ...
-```
-
-- Each **sub-folder is a learning outcome**; its files become evidence linked to
-  that goal (mapping configured in `goal-map.json`).
-- The optional **`reader.txt`** (or `reader.md`) is the collection intro. Write
-  plain prose and reference a document with `@[Document name.pdf]`; the tool
-  turns each reference into a clickable link to that evidence. This lets the
-  reader be a chronological story that links to the documents it mentions.
-- If a `output/` sub-folder exists it is used as the source; otherwise the
-  project directory itself.
-
-## Install
+De makkelijkste weg is de onboarding-wizard. Die vraagt waar je documenten staan
+en wat de URLs van je instelling zijn, schrijft een config-bestand en biedt aan
+om meteen in te loggen:
 
 ```bash
-git clone https://github.com/NoelisTired/FontysCanvasCLI.git
-cd FontysCanvasCLI
+git clone https://github.com/NoelisTired/FontysCanvasCLI.git canvas-portfolio-cli
+cd canvas-portfolio-cli
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/python -m playwright install chromium
-cp canvas.config.example.json canvas.config.json   # then edit for your school
-./.venv/bin/python canvas.py --login               # sign in once
+./.venv/bin/python canvas.py --init
 ```
 
-## Configure (for a school other than Fontys)
+De wizard vraagt onder andere: "Waar wil je je portfoliodocumenten op baseren?"
+Daar geef je de projectmap op. Er wordt nooit een wachtwoord opgeslagen.
 
-Copy `canvas.config.example.json` to `canvas.config.json` and fill in your
-values. Resolution order is env var, then config file, then the Fontys default.
+## Geen wachtwoord nodig
 
-| Setting | Env var | What it is |
-| --- | --- | --- |
-| `canvas_url` | `CANVAS_URL` | Your Canvas base URL, e.g. `https://<school>.instructure.com/` |
-| `portflow_host` | `PORTFLOW_HOST` | The Portflow host (usually `portfolio.drieam.app`) |
-| `portflow_launch_url` | `PORTFLOW_LAUNCH_URL` | The Canvas external-tool launch URL for the Portfolio nav item |
-| `ntfy_topic` | `CANVAS_NTFY_TOPIC` | Optional ntfy.sh topic for a post-sync push; empty disables it |
-| `feedpulse_course` / `feedpulse_tool` | `CANVAS_FEEDPULSE_COURSE` / `_TOOL` | Optional, only for the feedpulse command |
-
-The config file holds no secrets. The browser profile (`.pw-profile/`) and any
-secrets file stay out of git via `.gitignore`.
-
-## Usage
-
-Always dry-run first, read the plan, then apply.
+De aanbevolen manier van inloggen slaat nergens een wachtwoord op. Je logt één
+keer zelf in een zichtbaar browservenster in (jij typt je eigen wachtwoord, de
+tool ziet het niet), en het browserprofiel onthoudt de sessie voor volgende,
+headless runs:
 
 ```bash
-# Sanity check: login, launch, print the portfolio structure
+./.venv/bin/python canvas.py --login
+```
+
+Wil je volledig headless draaien op je eigen machine, dan kun je optioneel
+inloggegevens in een secrets-bestand of in omgevingsvariabelen zetten (zie
+Inloggegevens onderaan). De tool gebruikt ze alleen om het loginformulier in te
+vullen; hij onderschept, bewaart of toont nooit een wachtwoord.
+
+## Hoe een project eruitziet
+
+Je wijst de tool naar een projectmap. Daarin:
+
+```
+mijn-portfolio/
+  reader.txt                 # de leeswijzer/intro, met @-verwijzingen (optioneel)
+  <Leeruitkomst 1>/          # één map per leeruitkomst
+    Een document.pdf
+    Nog een document.pdf
+  <Leeruitkomst 2>/
+    ...
+```
+
+- Elke **submap is een leeruitkomst**; de bestanden erin worden bewijs dat aan
+  die leeruitkomst wordt gekoppeld (de koppeling stel je in met `goal-map.json`).
+- De optionele **`reader.txt`** (of `reader.md`) is de intro van de verzameling.
+  Schrijf gewone tekst en verwijs naar een document met `@[Documentnaam.pdf]`; de
+  tool maakt van elke verwijzing een klikbare link naar dat bewijs. Zo wordt de
+  leeswijzer een chronologisch verhaal dat naar de documenten linkt.
+- Bestaat er een submap `output/`, dan wordt die als bron gebruikt; anders de
+  projectmap zelf.
+
+## Instellen (voor een andere instelling dan Fontys)
+
+De wizard schrijft `canvas.config.json` voor je. Je kunt dat bestand ook met de
+hand maken: kopieer `canvas.config.example.json` en vul je waarden in. Volgorde
+van toepassing: omgevingsvariabele, dan config-bestand, dan de Fontys-standaard.
+
+| Instelling | Omgevingsvariabele | Wat het is |
+| --- | --- | --- |
+| `canvas_url` | `CANVAS_URL` | De basis-URL van je Canvas, bijv. `https://<instelling>.instructure.com/` |
+| `portflow_host` | `PORTFLOW_HOST` | De Portflow-host (meestal `portfolio.drieam.app`) |
+| `portflow_launch_url` | `PORTFLOW_LAUNCH_URL` | De Canvas-launch-URL van het Portfolio-item in de navigatie |
+| `ntfy_topic` | `CANVAS_NTFY_TOPIC` | Optioneel ntfy.sh-topic voor een melding na het uploaden; leeg = uit |
+| `project_dir` | (geen) | Standaard projectmap (de wizard vult dit) |
+
+Het config-bestand bevat geen geheimen. Het browserprofiel (`.pw-profile/`) en
+een eventueel secrets-bestand blijven uit git via `.gitignore`.
+
+## Gebruik
+
+Draai altijd eerst een proefrun, lees het plan, en voer daarna pas uit.
+
+```bash
+# Controle: inloggen, launchen, en de portfoliostructuur tonen
 ./.venv/bin/python canvas.py --whoami
 
-# Plan (dry-run): source and collection auto-detected from the project dir
-./.venv/bin/python canvas.py --project /path/to/my-portfolio
+# Proefrun: bron en verzameling worden uit de projectmap afgeleid
+./.venv/bin/python canvas.py --project /pad/naar/mijn-portfolio
 
-# Apply, only after you have read and approved the plan
-./.venv/bin/python canvas.py --project /path/to/my-portfolio --apply
+# Uitvoeren, pas nadat je het plan hebt gelezen en goedgekeurd
+./.venv/bin/python canvas.py --project /pad/naar/mijn-portfolio --apply
 
-# Build the reader from reader.txt (with @references), replacing the current one
-./.venv/bin/python reader.py --project /path/to/my-portfolio --set
-./.venv/bin/python reader.py --project /path/to/my-portfolio --mentionable  # list @names
+# De leeswijzer bouwen uit reader.txt (met @-verwijzingen), vervangt de huidige
+./.venv/bin/python reader.py --project /pad/naar/mijn-portfolio --set
+./.venv/bin/python reader.py --project /pad/naar/mijn-portfolio --mentionable  # toont @-namen
 ```
 
-Overrides: `--source <dir>`, `--collection "<name>"`. `--project` defaults to the
-current working directory. `--reseed` realigns the local change-detection
-manifest without uploading; `--ntfy` pushes a post-apply summary.
+Overschrijven kan met `--source <map>` en `--collection "<naam>"`. `--project`
+valt terug op `project_dir` uit de config, anders de huidige map. `--reseed`
+herstelt de lokale wijzigingsdetectie zonder te uploaden; `--ntfy` stuurt een
+melding na het uploaden.
 
-### The plan (dedupe logic)
+### Het plan (dubbele-upload-logica)
 
-| Mark | Meaning |
+| Teken | Betekenis |
 | --- | --- |
-| `＋ ADD` | No evidence with this file name exists, so create new evidence. |
-| `↻ VERSION` | Same name exists but the content changed, so add a new version. |
-| `· SKIP` | Same name, same content, already up to date. |
+| `＋ ADD` | Nog geen bewijs met deze bestandsnaam; maak nieuw bewijs aan. |
+| `↻ VERSION` | Zelfde naam bestaat, maar de inhoud is gewijzigd; voeg een nieuwe versie toe. |
+| `· SKIP` | Zelfde naam, zelfde inhoud; al bij. |
 
-Change detection hashes PDF text with per-page footers (build date, page number)
-stripped, so a plain rebuild does not look changed. The header shows
-`Laatst geupdatet: <date> > nu` so you can see what is being replaced.
+De wijzigingsdetectie hasht de tekstlaag van een PDF, met de wisselende voet- en
+koptekst (bouwdatum, paginanummer) eruit, zodat een gewone rebuild niet als
+gewijzigd telt. De kop toont `Laatst geupdatet: <datum> > nu`, zodat duidelijk is
+wat er vervangen wordt.
 
-## Reviews, sharing, reader: always confirmed
+## Reviews, delen, leeswijzer: altijd bevestigd
 
-These touch other people or replace content, so they are separate, explicit
-steps that never happen automatically.
+Deze raken andere mensen of vervangen inhoud, dus het zijn aparte, expliciete
+stappen die nooit automatisch gebeuren.
 
 ```bash
-./.venv/bin/python review.py --evidence <id>                 # show recipients
+./.venv/bin/python review.py --evidence <id>                 # toont ontvangers
 ./.venv/bin/python review.py --evidence <id> --send --recipient <uid> --message "..."
-./.venv/bin/python share.py --search "name"                  # find a user
+./.venv/bin/python share.py --search "naam"                  # zoek een gebruiker
 ./.venv/bin/python share.py --send --user <id> --until 2027-08-31
 ```
 
-## Why it needs a browser
+## Inloggegevens (optioneel)
 
-Portflow's LTI 1.3 launch cannot be done with plain HTTP: the handshake routes
-through `sso.canvaslms.com` and uses LTI Platform Storage (postMessage, so
-JavaScript), and the API authorizes with an in-memory Bearer token the app never
-stores in a cookie. So a headless Chromium does the login and launch, and hands a
-plain `requests.Session` to the API client for the fast work. The SSO login and
-transport helpers are vendored from
+Alleen nodig voor volledig headless draaien. Env `CANVAS_USER` / `CANVAS_PASS`,
+of een secrets-bestand (`~/.config/canvas-portflow/secrets.json`, of
+`~/.claude/secrets.json`), met een sleutel `fontys`/`canvas`/`portflow` die
+`user` en `pass` bevat. Alleen gebruikt om het loginformulier in te vullen.
+
+## Waarom het een browser nodig heeft
+
+De LTI 1.3-launch van Portflow kan niet met gewone HTTP: de handshake loopt via
+`sso.canvaslms.com` en gebruikt LTI Platform Storage (postMessage, dus
+JavaScript), en de API autoriseert met een Bearer-token dat de app alleen in het
+geheugen houdt. Daarom doet een headless Chromium het inloggen en launchen, en
+geeft daarna een gewone `requests.Session` door aan de API-client voor het snelle
+werk. De SSO-login- en transportonderdelen komen uit
 [fontys-canvas-bypass](https://github.com/NoelisTired/fontys-canvas-bypass).
 
-## Fragility
+## FeedPulse (Fontys-specifiek)
 
-Everything under `portfolio.drieam.app/api/v1` was reverse-engineered from the
-web UI; Drieam can change it, and the client raises `PortflowError` with the
-status and body so failures are loud. The launch handshake and any new MFA
-enforcement are the most likely break points. Re-run `--login` if the saved
-session expires.
+Het `feedpulse`-commando werkt tegen `fhict.feedpulse.com` en is daarmee
+specifiek voor Fontys/FHICT; voor een andere instelling is dit onderdeel niet
+bruikbaar. De rest van de tool staat hier los van.
+
+## Houdbaarheid
+
+Alles onder `portfolio.drieam.app/api/v1` is afgeleid uit de web-interface;
+Drieam kan het wijzigen, en de client gooit `PortflowError` met de status en body
+zodat fouten luid zijn, niet stil. De launch-handshake en eventuele nieuwe
+MFA-afdwinging zijn de meest waarschijnlijke breekpunten. Draai `--login` opnieuw
+als de bewaarde sessie verloopt.
 
 ## Disclaimer
 
-A personal automation tool for your own Canvas/Portflow account. It uses your own
-login to do what you can already do by hand in the browser. Use it only on an
-account you own.
+Een persoonlijke automatiseringstool voor je eigen Canvas/Portflow-account. Hij
+gebruikt je eigen login om te doen wat je ook met de hand in de browser kunt. Zet
+hem alleen in op een account dat van jou is.

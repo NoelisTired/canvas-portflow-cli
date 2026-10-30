@@ -14,7 +14,7 @@ One command that answers three questions without touching anything:
 Usage:
   python status.py                       # all collections for the project (cwd)
   python status.py --project <dir>
-  python status.py --collection "Roosterke.nl"
+  python status.py --collection "<collection naam>"
   python status.py --json
 """
 
