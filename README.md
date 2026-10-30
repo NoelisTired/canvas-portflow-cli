@@ -36,8 +36,8 @@ en wat de URLs van je instelling zijn, schrijft een config-bestand en biedt aan
 om meteen in te loggen:
 
 ```bash
-git clone https://github.com/NoelisTired/FontysCanvasCLI.git canvas-portfolio-cli
-cd canvas-portfolio-cli
+git clone https://github.com/NoelisTired/canvas-portflow-cli.git
+cd canvas-portflow-cli
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/python -m playwright install chromium
