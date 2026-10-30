@@ -47,9 +47,24 @@ claude plugin marketplace add NoelisTired/canvas-portflow-cli
 claude plugin install canvas-portflow@canvas-portflow-cli --scope user
 ```
 
-De skill draait de eenmalige setup (venv + Playwright + onboarding) bij het eerste
-gebruik. Daarna roep je 'm aan met `/canvas-portflow:canvas`. Je kunt de tool ook
-puur als CLI gebruiken, zie hieronder.
+Daarna roep je 'm aan met `/canvas-portflow:canvas`. Je kunt de tool ook puur als
+CLI gebruiken, zie hieronder.
+
+> **Let op: geen één-klik-installatie.** Het installeren van de plugin zet alleen
+> de bestanden klaar. De tool heeft een echte Python-omgeving en een browser
+> nodig, dus bij het eerste gebruik draait de skill eenmalig deze setup (of je
+> doet het zelf):
+>
+> ```bash
+> cd <plugin-map>            # de geïnstalleerde plugin, ${CLAUDE_PLUGIN_ROOT}
+> python3 -m venv .venv
+> ./.venv/bin/pip install -r requirements.txt
+> ./.venv/bin/python -m playwright install chromium
+> ./.venv/bin/python canvas.py --init     # onboarding: projectmap + inloggen
+> ```
+>
+> Er wordt geen wachtwoord opgeslagen: je logt één keer zelf in een
+> browservenster in en de sessie wordt onthouden.
 
 ## Snel starten als CLI (onboarding)
 
