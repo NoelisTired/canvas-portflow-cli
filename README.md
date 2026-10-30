@@ -29,7 +29,29 @@ projectmap. De standaardinstellingen zijn op Fontys afgestemd, maar alles wat
 instellingsspecifiek is, is instelbaar, zodat het werkt voor elke Instructure
 Canvas plus Drieam Portflow.
 
-## Snel starten (onboarding)
+## Installeren als Claude Code-skill
+
+Deze repo is ook een Claude Code-plugin met een skill, zodat je er in Claude Code
+tegen kunt praten ("zet mijn bewijs in portflow", "maak de leeswijzer met links").
+In een Claude Code-sessie:
+
+```text
+/plugin marketplace add NoelisTired/canvas-portflow-cli
+/plugin install canvas-portflow@canvas-portflow-cli
+```
+
+Of in de terminal:
+
+```bash
+claude plugin marketplace add NoelisTired/canvas-portflow-cli
+claude plugin install canvas-portflow@canvas-portflow-cli --scope user
+```
+
+De skill draait de eenmalige setup (venv + Playwright + onboarding) bij het eerste
+gebruik. Daarna roep je 'm aan met `/canvas-portflow:canvas`. Je kunt de tool ook
+puur als CLI gebruiken, zie hieronder.
+
+## Snel starten als CLI (onboarding)
 
 De makkelijkste weg is de onboarding-wizard. Die vraagt waar je documenten staan
 en wat de URLs van je instelling zijn, schrijft een config-bestand en biedt aan

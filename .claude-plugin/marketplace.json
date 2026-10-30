@@ -1,0 +1,15 @@
+{
+  "name": "canvas-portflow-cli",
+  "description": "Canvas Portfolio CLI: sync portfolio documents into Portflow",
+  "owner": {
+    "name": "NoelisTired"
+  },
+  "plugins": [
+    {
+      "name": "canvas-portflow",
+      "source": "./",
+      "description": "Sync a folder of portfolio documents into a Drieam Portflow portfolio on Instructure Canvas.",
+      "version": "1.0.0"
+    }
+  ]
+}
