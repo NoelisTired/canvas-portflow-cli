@@ -101,7 +101,7 @@ class PortflowClient:
         ) or []
 
     def shared_users(self, pid: int, eid: int) -> list[dict]:
-        """People an evidence is shared with — the only valid review recipients."""
+        """People an evidence is shared with: the only valid review recipients."""
         return self._paged(f"/portfolios/{pid}/evidence/{eid}/shared-users")
 
     def portfolio_shares(self, pid: int) -> list[dict]:
@@ -166,7 +166,7 @@ class PortflowClient:
         du = reg["direct_upload"]
         # The presigned S3 URL carries its own auth in the query string. Use a
         # bare request (not self._s) so the session's Authorization/CSRF headers
-        # don't leak to S3 — S3 rejects "two auth mechanisms" with a 400.
+        # don't leak to S3; S3 rejects "two auth mechanisms" with a 400.
         put = requests.put(du["url"], data=data, headers=du["headers"])
         if put.status_code >= 400:
             raise PortflowError(
@@ -248,7 +248,32 @@ class PortflowClient:
             json={"description": html},
         )
 
-    # ---- reviews / feedback (write — always gated by the orchestrator) ---
+    # ---- mentions (for @file references in the reader) -------------------
+
+    def mentionables(self, pid: int, kind: str = "evidence") -> list[dict]:
+        """List items that can be @-mentioned in a reader, as [{id, name}].
+
+        kind is one of: evidence, collections, goals, sub-goals. The reader's
+        rich text embeds a mention as a <span data-type="mention" ...>, and this
+        is the lookup the UI uses to turn an @name into the right id.
+        """
+        return self._paged(f"/portfolios/{pid}/mentions/{kind}")
+
+    def resolve_mentions(self, pid: int, items: list[dict]) -> list[dict]:
+        """Validate/resolve a set of mentions before saving the reader.
+
+        `items` are [{type, id}] (type e.g. "evidence"); the server returns the
+        resolved [{id, name, type, portfolio_id}]. Mirrors what the UI posts
+        right before it PUTs the collection description.
+        """
+        body = {"mentions": [
+            {"type": m.get("type", "evidence"), "id": str(m["id"]),
+             "portfolio_id": str(pid)} for m in items
+        ]}
+        return self._json(
+            self._req("POST", f"/portfolios/{pid}/mentions", json=body)) or []
+
+    # ---- reviews / feedback (write, always gated by the orchestrator) ---
 
     def request_feedback(
         self,

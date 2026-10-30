@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""canvas review — request feedback on a piece of evidence (always confirmed).
+"""canvas review: request feedback on a piece of evidence (always confirmed).
 
 Reviews are never sent automatically. The model calls this to:
   1. list mode (default): show an evidence's latest version id and the users
      it is shared with (the only valid recipients), so the user can choose.
-  2. send mode (--send): actually POST the feedback request — only after the
+  2. send mode (--send): actually POST the feedback request, only after the
      user has confirmed recipient + message in chat.
 
 Usage:

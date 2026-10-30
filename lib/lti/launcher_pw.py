@@ -19,9 +19,12 @@ from pathlib import Path
 
 import requests
 
-PROFILE_DIR = Path(__file__).resolve().parents[2] / ".pw-profile"
-CANVAS_HOME = "https://fhict.instructure.com/"
-PORTFLOW_ORIGIN = "https://portfolio.drieam.app"
+from ..config import CANVAS_URL, PORTFLOW_HOST, PROFILE_DIR  # noqa: F401
+
+# Re-exported for the FeedPulse launcher and others; resolved from config so the
+# tool is not hard-wired to one school.
+CANVAS_HOME = CANVAS_URL
+PORTFLOW_ORIGIN = f"https://{PORTFLOW_HOST}"
 
 
 class PlaywrightLaunchError(RuntimeError):
@@ -30,8 +33,8 @@ class PlaywrightLaunchError(RuntimeError):
 
 def launch_with_playwright(
     canvas_tool_url: str,
-    username: str,
-    password: str,
+    username: str | None = None,
+    password: str | None = None,
     headful: bool | None = None,
     timeout_ms: int = 45000,
 ) -> tuple[requests.Session, dict]:
@@ -168,15 +171,23 @@ def launch_with_playwright(
             ctx.close()
 
 
-def _login_if_needed(page, username: str, password: str) -> None:
+def _login_if_needed(page, username: str | None, password: str | None) -> None:
     page.goto(CANVAS_HOME, wait_until="domcontentloaded")
-    if "instructure.com" in page.url and "/login" not in page.url:
+    if "/login" not in page.url and _on_canvas(page):
         return  # persistent profile still authenticated
-    # ADFS / Fontys login form. Field names vary; match by type/attr.
+
+    # No stored credentials: the user logs in themselves in the visible window.
+    # The tool never sees or stores the password; the persistent profile keeps
+    # the session for later headless runs.
+    if not (username and password):
+        _interactive_login(page)
+        return
+
+    # ADFS / SSO login form. Field names vary; match by type/attr.
     try:
         page.wait_for_selector("input[type=password]", timeout=15000)
     except Exception:
-        if "instructure.com" in page.url:
+        if _on_canvas(page):
             return
         raise
     user_sel = (
@@ -201,7 +212,57 @@ def _login_if_needed(page, username: str, password: str) -> None:
                 break
             except Exception:
                 pass
-    page.wait_for_url("**instructure.com/**", timeout=20000)
+    page.wait_for_url(f"**{_canvas_host()}/**", timeout=20000)
+
+
+def _canvas_host() -> str:
+    """The Canvas host (e.g. fhict.instructure.com) from the configured URL."""
+    from urllib.parse import urlparse
+    return urlparse(CANVAS_HOME).netloc
+
+
+def _on_canvas(page) -> bool:
+    """True when the page is on the configured Canvas host (signed in)."""
+    return _canvas_host() in page.url
+
+
+def _interactive_login(page, timeout_s: int = 300) -> None:
+    """First-time login: let the user sign in themselves in the open window.
+
+    Used when no credentials are configured. We never fill or read the password;
+    we only wait until the browser lands on Canvas (the user completed login,
+    including any MFA), after which the persistent profile remembers the session.
+    Requires a visible window: if running headless, raise with clear guidance.
+    """
+    import sys
+    import time
+
+    if os.environ.get("CANVAS_HEADFUL") != "1":
+        raise PlaywrightLaunchError(
+            "First-time login needs a visible browser window, but no saved "
+            "session and no credentials were found.\n"
+            "Run the one-time setup so you can log in yourself:\n"
+            "    CANVAS_HEADFUL=1 python canvas.py --login\n"
+            "You type your own password in the window; the tool never sees it, "
+            "and remembers the session for later headless runs."
+        )
+    print("\n>> Log in to Canvas in the browser window that just opened.",
+          file=sys.stderr)
+    print(">> The tool never sees your password; it just waits until you are in.",
+          file=sys.stderr)
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            if "/login" not in page.url and _on_canvas(page):
+                print(">> Logged in. Session saved to the browser profile.",
+                      file=sys.stderr)
+                return
+        except Exception:
+            pass
+        page.wait_for_timeout(1000)
+    raise PlaywrightLaunchError(
+        "Timed out waiting for you to finish logging in (5 min)."
+    )
 
 
 def _submit_launch_form_top_level(page, timeout_ms: int) -> None:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""canvas share — give someone access to the portfolio (always confirmed).
+"""canvas share: give someone access to the portfolio (always confirmed).
 
 Sharing is outward-facing (another person gets access), so it is never
 automatic. Default (search) mode just finds candidate users; --send performs

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""canvas — place Roosterke evidence into the Portflow portfolio.
+"""canvas - place Roosterke evidence into the Portflow portfolio.
 
 Flow:
   1. Log into Canvas via Fontys ADFS (vendored from fontys-canvas-bypass).
@@ -78,20 +78,65 @@ def eprint(*a):
 
 # ---- session -------------------------------------------------------------
 
-def connect() -> tuple[PortflowClient, dict, int]:
+LAUNCH_ATTEMPTS = int(os.environ.get("CANVAS_LAUNCH_ATTEMPTS", "3"))
+
+
+def connect(attempts: int = LAUNCH_ATTEMPTS) -> tuple[PortflowClient, dict, int]:
+    """Log in and launch Portflow, retrying the browser launch on failure.
+
+    The LTI launch is occasionally flaky (the SPA may not fire its first
+    authorized API call before the timeout, so the Bearer is missed). Rather
+    than fail the whole run on the first miss, retry the launch a few times.
+    """
     user, pw = load_credentials()
-    eprint("· launching Portflow via browser (ADFS login + LTI 1.3)…")
+    last_err: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        label = f" (poging {attempt}/{attempts})" if attempts > 1 else ""
+        eprint(f"· launching Portflow via browser (ADFS login + LTI 1.3){label}…")
+        try:
+            s, launch = launch_with_playwright(PORTFLOW_LAUNCH_URL, user, pw)
+        except PlaywrightLaunchError as e:
+            last_err = e
+            eprint(f"  (launch poging {attempt} mislukt: {str(e).splitlines()[0]})")
+            continue
+        pf = PortflowClient(s)
+        try:
+            me = pf.current_user()
+        except PortflowError as e:
+            last_err = e
+            eprint(f"  (sessie poging {attempt} niet bruikbaar: {e})")
+            continue
+        eprint(f"· signed in as {me.get('name')} (portflow id {me.get('id')})")
+        pid = int(os.environ.get("PORTFLOW_PORTFOLIO_ID")
+                  or launch.get("portfolio_id") or 0)
+        if not pid:
+            raise ConfigError(
+                "Could not determine the portfolio id from the launch. Pass "
+                "PORTFLOW_PORTFOLIO_ID=<id> (visible in any Portflow URL)."
+            )
+        return pf, me, pid
+    # All attempts failed.
+    raise PlaywrightLaunchError(
+        f"Launch mislukt na {attempts} pogingen. Laatste fout:\n{last_err}"
+    )
+
+
+def login() -> None:
+    """One-time interactive login: open a visible browser, let the user sign in.
+
+    No credentials are needed or stored. The user types their own password in
+    the window (the tool never sees it); the persistent profile then remembers
+    the session so later runs are headless. Safe to re-run any time the saved
+    session expires.
+    """
+    os.environ["CANVAS_HEADFUL"] = "1"
+    user, pw = load_credentials()  # may be (None, None); that is fine
+    eprint("· opening a browser window for you to log in…")
     s, launch = launch_with_playwright(PORTFLOW_LAUNCH_URL, user, pw)
     pf = PortflowClient(s)
     me = pf.current_user()
-    eprint(f"· signed in as {me.get('name')} (portflow id {me.get('id')})")
-    pid = int(os.environ.get("PORTFLOW_PORTFOLIO_ID") or launch.get("portfolio_id") or 0)
-    if not pid:
-        raise ConfigError(
-            "Could not determine the portfolio id from the launch. Pass "
-            "PORTFLOW_PORTFOLIO_ID=<id> (visible in any Portflow URL)."
-        )
-    return pf, me, pid
+    eprint(f"✓ Ingelogd als {me.get('name')}. De sessie is bewaard; volgende keren "
+           "gaat het vanzelf (headless).")
 
 
 # ---- goal mapping --------------------------------------------------------
@@ -179,7 +224,6 @@ def match_collection(cols: list[dict], project: Path, gmap: dict) -> tuple[dict,
 
 def plan(pf: PortflowClient, pid: int, col: dict, source: Path, gmap: dict, force_version: bool):
     goal_wraps = pf.collection_goals(pid, col["id"])
-    goal_wraps = pf.collection_goals(pid, col["id"])
     # collection_evidence wraps each item as {id, position, evidence:{...}};
     # index the inner evidence object by its file name.
     existing = {}
@@ -219,22 +263,66 @@ def plan(pf: PortflowClient, pid: int, col: dict, source: Path, gmap: dict, forc
                 "goal": goal, "goal_target": target,
                 "evidence_id": ev["id"] if ev else None,
                 "collection_id": col["id"], "hash": digest,
+                "last_update": _ev_date(ev) if ev else None,
             })
     return actions
+
+
+def _ev_date(ev: dict) -> str | None:
+    """Best-effort 'last updated' date (YYYY-MM-DD) of an existing evidence."""
+    raw = (ev.get("latest_version_created_at") or ev.get("date")
+           or ev.get("created_at"))
+    if not raw:
+        return None
+    return str(raw)[:10]
+
+
+import re as _re
+
+# Per-page footer/header lines that change every rebuild (build date, page
+# number) even when the real content did not. They must be stripped before
+# hashing, otherwise every rebuild looks fully changed and uploads needless
+# versions. Matched per line, case-insensitive, after trimming.
+_VOLATILE_LINE = _re.compile(
+    r"""^(?:
+          versie\s+\d[\w.]*\s*[·|]\s*\d{4}-\d{2}-\d{2}   # "versie 1.0 · 2026-10-30"
+        | pagina\s+\d+                                    # "pagina 3"
+        | \d{4}-\d{2}-\d{2}                               # a bare ISO date line
+    )$""",
+    _re.IGNORECASE | _re.VERBOSE,
+)
+
+
+def _strip_volatile(text: str) -> str:
+    """Drop per-page footer lines (build date, page number) from PDF text.
+
+    Keeps only lines that carry real content, so a rebuild with identical
+    content hashes the same. Blank lines are dropped too so whitespace churn
+    from the stripped footers does not affect the hash.
+    """
+    out = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or _VOLATILE_LINE.match(s):
+            continue
+        out.append(s)
+    return "\n".join(out)
 
 
 def content_hash(f: Path) -> str:
     """Stable content hash of a file.
 
-    For PDFs, hash the extracted text layer (ignoring volatile metadata like the
-    build timestamp reportlab embeds), so a rebuild with identical content does
-    not look 'changed'. For everything else, hash the raw bytes.
+    For PDFs, hash the extracted text layer with per-page footers (build date,
+    page number) stripped, so a rebuild with identical content does not look
+    'changed'. For everything else, hash the raw bytes.
     """
     import hashlib
     if f.suffix.lower() == ".pdf":
         text = _pdf_text(f)
         if text is not None:
-            return "pdftext:" + hashlib.sha256(text.encode("utf-8", "ignore")).hexdigest()
+            cleaned = _strip_volatile(text)
+            return "pdftext2:" + hashlib.sha256(
+                cleaned.encode("utf-8", "ignore")).hexdigest()
     return "bytes:" + hashlib.sha256(f.read_bytes()).hexdigest()
 
 
@@ -252,20 +340,36 @@ def _pdf_text(f: Path) -> str | None:
 
 def print_plan(col: dict, actions: list[dict]):
     counts = {"ADD": 0, "VERSION": 0, "SKIP": 0}
+    # Collection-level "last updated": the most recent evidence date we saw.
+    col_dates = [a["last_update"] for a in actions if a.get("last_update")]
+    laatst = max(col_dates) if col_dates else None
     print(f"\nCollection: {col['name']} (id {col['id']})")
+    print(f"  Laatst geupdatet: {laatst or 'onbekend'}  >  nu ({_today()})")
     for a in actions:
         counts[a["kind"]] += 1
         g = a["goal"]
         gl = (g.get("nickname") or g.get("name")) if g else \
-            (f"?{a['goal_target']}?" if a["goal_target"] else "— geen goal —")
+            (f"?{a['goal_target']}?" if a["goal_target"] else "geen goal")
         mark = {"ADD": "＋", "VERSION": "↻", "SKIP": "·"}[a["kind"]]
-        print(f"  {mark} {a['kind']:8} [{gl}]  {a['folder']}/{a['file'].name}")
+        line = f"  {mark} {a['kind']:8} [{gl}]  {a['folder']}/{a['file'].name}"
+        # On a VERSION, show when the current evidence was last updated, so it
+        # is clear what is being replaced: "laatst <date> > nu".
+        if a["kind"] == "VERSION" and a.get("last_update"):
+            line += f"   (laatst {a['last_update']} > nu)"
+        elif a["kind"] == "ADD":
+            line += "   (nieuw)"
+        print(line)
     print(f"\n  {counts['ADD']} toevoegen · {counts['VERSION']} nieuwe versie · "
           f"{counts['SKIP']} overslaan")
     nogoal = [a for a in actions if a["kind"] != "SKIP" and not a["goal"]]
     if nogoal:
         print(f"  ⚠ {len(nogoal)} bestand(en) zonder gekoppeld leerdoel "
               "(upload wel, maar niet aan een goal gekoppeld).")
+
+
+def _today() -> str:
+    from datetime import date
+    return date.today().isoformat()
 
 
 # ---- apply ---------------------------------------------------------------
@@ -311,6 +415,45 @@ def pid_to_col(actions: list[dict]) -> int:
     return actions[0]["collection_id"] if actions else 0
 
 
+# ---- ntfy summary (read-only side effect) --------------------------------
+
+from lib.config import NTFY_TOPIC as _CFG_NTFY_TOPIC  # noqa: E402
+# Default ntfy topic from config/env; empty string means "not configured".
+NTFY_TOPIC = os.environ.get("CANVAS_NTFY_TOPIC") or _CFG_NTFY_TOPIC or ""
+
+
+def ntfy_summary(col: dict, uploaded: list[dict], topic: str = NTFY_TOPIC) -> None:
+    """Push a short summary of what was uploaded to ntfy.sh/<topic>.
+
+    Best-effort: a failed push is logged, never fatal. Sends only the counts and
+    file names already shown in the terminal - no credentials, no evidence
+    content, so it is safe to put on a public ntfy topic.
+    """
+    if not uploaded:
+        return
+    if not topic:
+        eprint("  (ntfy overgeslagen: geen topic geconfigureerd; zet ntfy_topic "
+               "in de config of CANVAS_NTFY_TOPIC)")
+        return
+    import requests as _rq
+    adds = [u["name"] for u in uploaded if u["kind"] == "ADD"]
+    vers = [u["name"] for u in uploaded if u["kind"] == "VERSION"]
+    lines = []
+    if adds:
+        lines.append("Nieuw: " + ", ".join(adds))
+    if vers:
+        lines.append("Versie: " + ", ".join(vers))
+    body = "\n".join(lines) or f"{len(uploaded)} bewijsstuk(ken) bijgewerkt."
+    title = f"Portflow: {col['name']} bijgewerkt ({len(uploaded)})"
+    try:
+        _rq.post(f"https://ntfy.sh/{topic}", data=body.encode("utf-8"),
+                 headers={"Title": title.encode("utf-8"), "Tags": "inbox_tray"},
+                 timeout=10)
+        eprint(f"· ntfy push verstuurd naar ntfy.sh/{topic}")
+    except Exception as e:  # noqa: BLE001
+        eprint(f"  (ntfy push mislukt: {e})")
+
+
 # ---- main ----------------------------------------------------------------
 
 def main():
@@ -326,10 +469,31 @@ def main():
     ap.add_argument("--apply", action="store_true", help="Execute the plan (else dry-run).")
     ap.add_argument("--force-version", action="store_true",
                     help="Add a new version for same-name files even if size matches.")
+    ap.add_argument("--ntfy", nargs="?", const=NTFY_TOPIC, default=None,
+                    metavar="TOPIC",
+                    help="After --apply, push a summary to ntfy.sh/<topic> "
+                         f"(default topic: {NTFY_TOPIC}). Counts + names only.")
     ap.add_argument("--whoami", action="store_true",
                     help="Login + launch + print portfolio structure, nothing else.")
+    ap.add_argument("--reseed", action="store_true",
+                    help="Recompute and store the content hash of every file that "
+                         "already exists on Portflow, WITHOUT uploading. Use after a "
+                         "hashing change or a lost/stale manifest so unchanged files "
+                         "stop showing up as new versions.")
+    ap.add_argument("--login", action="store_true",
+                    help="One-time interactive login: open a browser so you can "
+                         "sign in yourself. No password is stored; the session is "
+                         "remembered for later headless runs.")
     ap.add_argument("--json", action="store_true", help="Emit the plan as JSON.")
     args = ap.parse_args()
+
+    if args.login:
+        try:
+            login()
+        except (PlaywrightLaunchError, ConfigError) as e:
+            eprint(f"✗ {e}")
+            sys.exit(2)
+        return
 
     global MANIFEST
     MANIFEST = _load_manifest()
@@ -383,6 +547,27 @@ def main():
            f"| source {source}")
     actions = plan(pf, pid, col, source, gmap, args.force_version)
 
+    if args.reseed:
+        # Store the current-scheme hash for every file that already exists on
+        # Portflow (ADD files are genuinely new, so they are left out). Uploads
+        # nothing; this only realigns the local manifest with what is live.
+        coll = MANIFEST.setdefault(col["id"], {})
+        n = 0
+        for a in actions:
+            if a["kind"] != "ADD":  # VERSION or SKIP == already on Portflow
+                coll[a["file"].name] = a["hash"]
+                n += 1
+        _save_manifest(MANIFEST)
+        still_new = [a for a in actions if a["kind"] == "ADD"]
+        print(f"\nManifest opnieuw geseed: {n} bestaande bestand-hashes bijgewerkt.")
+        if still_new:
+            print(f"{len(still_new)} bestand(en) staan nog niet op Portflow "
+                  "(blijven ADD):")
+            for a in still_new:
+                print(f"   ＋ {a['folder']}/{a['file'].name}")
+        print("\n(er is niets geupload; draai zonder --reseed voor het echte plan)")
+        return
+
     if args.json:
         print(json.dumps({
             "collection": {"id": col["id"], "name": col["name"]},
@@ -397,9 +582,11 @@ def main():
 
     print_plan(col, actions)
     if args.apply:
-        print("\n— UITVOEREN —")
+        print("\n== UITVOEREN ==")
         uploaded = apply(pf, pid, actions)
         if uploaded:
+            if args.ntfy:
+                ntfy_summary(col, uploaded, args.ntfy)
             print("\nWil je een review aanvragen op (een van) deze? Dat is een "
                   "aparte, bevestigde stap:")
             for u in uploaded:
@@ -418,7 +605,7 @@ def main():
         if seeded:
             _save_manifest(MANIFEST)
             eprint(f"· manifest geseed met {seeded} bestaande bestand-hashes")
-        print("\n(dry-run — voeg --apply toe om echt te uploaden)")
+        print("\n(dry-run, voeg --apply toe om echt te uploaden)")
 
 
 if __name__ == "__main__":

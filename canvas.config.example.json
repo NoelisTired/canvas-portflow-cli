@@ -1,0 +1,18 @@
+{
+  "_comment": "Copy this to canvas.config.json and fill in your school's values. Every setting can also be given as an environment variable (see the README). Defaults are Fontys; change them for your Instructure Canvas + Drieam Portflow setup.",
+
+  "canvas_url": "https://<your-school>.instructure.com/",
+
+  "portflow_host": "portfolio.drieam.app",
+
+  "_portflow_launch_url": "The Canvas external-tool launch URL for the Portflow/Portfolio nav item. Open Canvas, click the Portfolio item, and copy the URL it launches from (looks like .../external_tools/<id>?launch_type=global_navigation&toolId=portfolio-<id>).",
+  "portflow_launch_url": "https://<your-school>.instructure.com/accounts/1/external_tools/<TOOL_ID>?launch_type=global_navigation&toolId=portfolio-<TOOL_ID>",
+
+  "_ntfy_topic": "Optional. A ntfy.sh topic for a push summary after --apply --ntfy. Leave empty to disable.",
+  "ntfy_topic": "",
+
+  "_feedpulse": "Optional. Only needed for the feedpulse command. Find the course and tool ids in the FeedPulse launch URL in Canvas: .../courses/<course>/external_tools/<tool>.",
+  "feedpulse_host": "fhict.feedpulse.com",
+  "feedpulse_course": "",
+  "feedpulse_tool": ""
+}
